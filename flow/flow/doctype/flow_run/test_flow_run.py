@@ -181,6 +181,43 @@ class TestFlowRunPersistence(IntegrationTestCase):
 			json.loads(doc.usage), {"prompt_tokens": 7, "completion_tokens": 4, "total_tokens": 11}
 		)
 
+	def test_resume_accumulates_optional_usage_without_inventing_missing_coverage(self):
+		session = _new_session(self.agent)
+		first = _paused_result()
+		first.usage.update(
+			{
+				"cached_input_tokens": 0,
+				"cached_input_covered_prompt_tokens": 4,
+				"cached_input_reported_rounds": 1,
+			}
+		)
+		doc = persist_result(first, source="Manual", input="delete the records", session=session)
+
+		second = _completed_result("emailed")
+		second.usage.update(
+			{
+				"reasoning_output_tokens": 1,
+				"reasoning_output_covered_completion_tokens": 2,
+				"reasoning_output_reported_rounds": 1,
+			}
+		)
+		doc.apply_result(second)
+
+		self.assertEqual(
+			json.loads(doc.usage),
+			{
+				"prompt_tokens": 7,
+				"completion_tokens": 4,
+				"total_tokens": 11,
+				"cached_input_tokens": 0,
+				"cached_input_covered_prompt_tokens": 4,
+				"cached_input_reported_rounds": 1,
+				"reasoning_output_tokens": 1,
+				"reasoning_output_covered_completion_tokens": 2,
+				"reasoning_output_reported_rounds": 1,
+			},
+		)
+
 	def test_persist_records_usage(self):
 		session = _new_session(self.agent)
 		doc = persist_result(_tooled_result(), source="Manual", input="x", session=session)

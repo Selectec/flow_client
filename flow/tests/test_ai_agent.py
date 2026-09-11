@@ -116,6 +116,46 @@ class TestAgentBasics(UnitTestCase):
 
 		self.assertEqual(result.usage, {"prompt_tokens": 8, "completion_tokens": 3, "total_tokens": 11})
 
+	def test_usage_retains_partial_cache_and_reasoning_coverage(self):
+		@tool
+		def ping() -> str:
+			"""Ping."""
+			return "pong"
+
+		model = FakeModel(
+			[
+				ChatResponse(
+					content=None,
+					tool_calls=[ToolCall(id="c1", name="ping", arguments={})],
+					usage={
+						"prompt_tokens": 5,
+						"completion_tokens": 2,
+						"total_tokens": 7,
+						"cached_input_tokens": 0,
+						"reasoning_output_tokens": 1,
+					},
+				),
+				_final("done", usage={"prompt_tokens": 3, "completion_tokens": 1, "total_tokens": 4}),
+			]
+		)
+
+		result = Agent(model=model, tools=[ping]).run("hi")
+
+		self.assertEqual(
+			result.usage,
+			{
+				"prompt_tokens": 8,
+				"completion_tokens": 3,
+				"total_tokens": 11,
+				"cached_input_tokens": 0,
+				"cached_input_covered_prompt_tokens": 5,
+				"cached_input_reported_rounds": 1,
+				"reasoning_output_tokens": 1,
+				"reasoning_output_covered_completion_tokens": 2,
+				"reasoning_output_reported_rounds": 1,
+			},
+		)
+
 
 class TestAgentToolLoop(UnitTestCase):
 	def test_executes_tool_call_and_loops_to_final_response(self):

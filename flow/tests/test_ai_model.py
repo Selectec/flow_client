@@ -103,6 +103,34 @@ class TestModel(UnitTestCase):
 		self.assertEqual(resp.tool_calls, [])
 		self.assertEqual(resp.finish_reason, "stop")
 		self.assertEqual(resp.usage["total_tokens"], 8)
+		self.assertNotIn("cached_input_tokens", resp.usage)
+		self.assertNotIn("reasoning_output_tokens", resp.usage)
+
+	@patch("litellm.completion")
+	def test_chat_preserves_reported_cache_and_reasoning_usage(self, mock_completion):
+		mock_completion.return_value = _fake_response(
+			content="hi there",
+			usage={
+				"prompt_tokens": 10,
+				"completion_tokens": 4,
+				"total_tokens": 14,
+				"prompt_tokens_details": {"cached_tokens": 0},
+				"completion_tokens_details": {"reasoning_tokens": 3},
+			},
+		)
+
+		response = Model(model_id="openai/gpt-4.1", api_key="sk-test").chat("hi")
+
+		self.assertEqual(
+			response.usage,
+			{
+				"prompt_tokens": 10,
+				"completion_tokens": 4,
+				"total_tokens": 14,
+				"cached_input_tokens": 0,
+				"reasoning_output_tokens": 3,
+			},
+		)
 
 	@patch("litellm.completion")
 	def test_chat_parses_tool_calls(self, mock_completion):
@@ -162,6 +190,31 @@ class TestModel(UnitTestCase):
 		self.assertEqual(response.finish_reason, "stop")
 		self.assertEqual(response.usage["total_tokens"], 7)
 		self.assertEqual(response.tool_calls, [])
+
+	@patch("litellm.completion")
+	def test_chat_stream_preserves_reported_cache_and_reasoning_usage(self, mock_completion):
+		mock_completion.return_value = iter(
+			[
+				_stream_chunk(content="hello"),
+				_stream_chunk(
+					finish_reason="stop",
+					usage={
+						"prompt_tokens": 10,
+						"completion_tokens": 4,
+						"total_tokens": 14,
+						"prompt_tokens_details": {"cached_tokens": 7},
+						"completion_tokens_details": {"reasoning_tokens": 2},
+					},
+				),
+			]
+		)
+
+		_yielded, response = _drain(
+			Model(model_id="openai/gpt-4.1", api_key="sk-test").chat("hi", stream=True)
+		)
+
+		self.assertEqual(response.usage["cached_input_tokens"], 7)
+		self.assertEqual(response.usage["reasoning_output_tokens"], 2)
 
 	@patch("litellm.completion")
 	def test_chat_stream_assembles_tool_calls_across_chunks(self, mock_completion):
