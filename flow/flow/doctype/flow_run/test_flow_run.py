@@ -128,6 +128,27 @@ class TestFlowRunPersistence(IntegrationTestCase):
 		tool_calls = json.loads(doc.tool_calls)
 		self.assertEqual(tool_calls, [{"id": "c1", "name": "read", "arguments": {"doctype": "Customer"}}])
 
+	def test_persist_serializes_optional_tool_measurements(self):
+		session = _new_session(self.agent)
+		result = _tooled_result()
+		result.tool_calls[0].outcome = "Completed"
+		result.tool_calls[0].elapsed_ms = 12
+
+		doc = persist_result(result, source="Manual", input="email customers", session=session)
+
+		self.assertEqual(
+			json.loads(doc.tool_calls),
+			[
+				{
+					"id": "c1",
+					"name": "read",
+					"arguments": {"doctype": "Customer"},
+					"outcome": "Completed",
+					"elapsed_ms": 12,
+				}
+			],
+		)
+
 	def test_persist_tooled_run_writes_all_messages_to_session(self):
 		session = _new_session(self.agent)
 		doc = persist_result(_tooled_result(), source="Manual", input="email customers", session=session)

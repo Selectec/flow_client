@@ -166,11 +166,7 @@ def _consume_stream(chunks: Any) -> Generator[str | ToolCallBegin, None, ChatRes
 
 		usage_obj = getattr(chunk, "usage", None)
 		if usage_obj is not None:
-			usage = {
-				"prompt_tokens": _attr(usage_obj, "prompt_tokens", 0) or 0,
-				"completion_tokens": _attr(usage_obj, "completion_tokens", 0) or 0,
-				"total_tokens": _attr(usage_obj, "total_tokens", 0) or 0,
-			}
+			usage = _normalize_usage(usage_obj)
 
 	return ChatResponse(
 		content="".join(content_parts) or None,
@@ -215,7 +211,7 @@ def _build_tool_call(call_id: str, name: str, raw_args: str) -> ToolCall:
 		return ToolCall(id=call_id, name=name, arguments={})
 	try:
 		arguments = json.loads(raw_args)
-	except (TypeError, ValueError):
+	except TypeError, ValueError:
 		return ToolCall(
 			id=call_id,
 			name=name,
@@ -243,12 +239,7 @@ def _normalize(response: Any) -> ChatResponse:
 		raw_args = _attr(function, "arguments", "") or ""
 		tool_calls.append(_build_tool_call(_attr(raw_call, "id", ""), name, raw_args))
 
-	usage_obj = getattr(response, "usage", None)
-	usage = {
-		"prompt_tokens": _attr(usage_obj, "prompt_tokens", 0) or 0,
-		"completion_tokens": _attr(usage_obj, "completion_tokens", 0) or 0,
-		"total_tokens": _attr(usage_obj, "total_tokens", 0) or 0,
-	}
+	usage = _normalize_usage(getattr(response, "usage", None))
 
 	return ChatResponse(
 		content=getattr(message, "content", None),
@@ -256,6 +247,34 @@ def _normalize(response: Any) -> ChatResponse:
 		finish_reason=getattr(choice, "finish_reason", None),
 		usage=usage,
 	)
+
+
+def _normalize_usage(usage_obj: Any) -> dict[str, int]:
+	usage = {
+		"prompt_tokens": _usage_count(usage_obj, "prompt_tokens") or 0,
+		"completion_tokens": _usage_count(usage_obj, "completion_tokens") or 0,
+		"total_tokens": _usage_count(usage_obj, "total_tokens") or 0,
+	}
+	prompt_details = _attr(usage_obj, "prompt_tokens_details")
+	cached_tokens = _usage_count(prompt_details, "cached_tokens")
+	if cached_tokens is not None:
+		usage["cached_input_tokens"] = cached_tokens
+	completion_details = _attr(usage_obj, "completion_tokens_details")
+	reasoning_tokens = _usage_count(completion_details, "reasoning_tokens")
+	if reasoning_tokens is not None:
+		usage["reasoning_output_tokens"] = reasoning_tokens
+	return usage
+
+
+def _usage_count(obj: Any, key: str) -> int | None:
+	value = _attr(obj, key)
+	if value is None:
+		return None
+	try:
+		count = int(value)
+	except TypeError, ValueError:
+		return None
+	return count if count >= 0 else None
 
 
 def _attr(obj: Any, key: str, default: Any = None) -> Any:

@@ -15,7 +15,7 @@ from frappe.model.document import Document
 if TYPE_CHECKING:
 	from flow.lib.agent import Event, RunResult
 
-JSON_FIELDS = ("tool_calls", "questions", "usage", "config_snapshot")
+JSON_FIELDS = ("tool_calls", "questions", "usage", "measurements", "config_snapshot")
 
 
 @dataclass
@@ -48,6 +48,7 @@ class FlowRun(Document):
 		feedback_rating: DF.Literal["", "Up", "Down"]
 		input: DF.LongText | None
 		iterations: DF.Int
+		measurements: DF.JSON | None
 		output: DF.LongText | None
 		questions: DF.JSON | None
 		reference_doctype: DF.Link | None
@@ -73,7 +74,7 @@ class FlowRun(Document):
 				continue
 			try:
 				json.loads(value)
-			except (TypeError, ValueError):
+			except TypeError, ValueError:
 				frappe.throw(
 					_("{0} must be valid JSON.").format(fieldname),
 					title=_("Invalid JSON"),
@@ -95,9 +96,7 @@ class FlowRun(Document):
 		self.status = _status_from_result(result)
 		self.iterations = (self.iterations or 0) + result.iterations
 		self.output = result.output
-		self.tool_calls = _dump_json(
-			[{"id": c.id, "name": c.name, "arguments": c.arguments} for c in result.tool_calls]
-		)
+		self.tool_calls = _dump_json([_tool_call_row(call) for call in result.tool_calls])
 		self.questions = _dump_json([asdict(q) for q in result.questions]) if result.paused else None
 		self.usage = _dump_json(_merge_usage(self.usage, result.usage))
 		if self.status != "Failed":
@@ -235,6 +234,15 @@ def _dump_json(value: Any) -> str | None:
 	return json.dumps(value, default=str)
 
 
+def _tool_call_row(call: Any) -> dict[str, Any]:
+	row = {"id": call.id, "name": call.name, "arguments": call.arguments}
+	for fieldname in ("outcome", "elapsed_ms"):
+		value = getattr(call, fieldname, None)
+		if value is not None:
+			row[fieldname] = value
+	return row
+
+
 def _merge_usage(existing: str | None, new: dict[str, int]) -> dict[str, int]:
 	"""Add token counts from a (resumed) segment onto whatever the run already recorded."""
 	merged = json.loads(existing) if existing else {}
@@ -248,6 +256,6 @@ def _json_has_items(value: Any) -> bool:
 		return False
 	try:
 		parsed = json.loads(value) if isinstance(value, str) else value
-	except (TypeError, ValueError):
+	except TypeError, ValueError:
 		return False
 	return bool(parsed)

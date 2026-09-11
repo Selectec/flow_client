@@ -8,18 +8,53 @@
 .flow-run pre.args { white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 0; }
 .flow-run .instructions { white-space: pre-wrap; word-break: break-word; max-height: 280px; overflow: auto; font-size: 13px; line-height: 1.5; }
 .flow-run table.calls { width: 100%; margin: 0; font-size: 12px; }
+.flow-run table.rounds { width: 100%; margin: 0; font-size: 12px; }
 .flow-run .empty { color: var(--text-muted); }
 </style>
 {% var esc = (v) => frappe.utils.escape_html(v == null ? "" : String(v)); %}
 {% var nf = (n) => Number(n || 0).toLocaleString(); %}
+{% var measured = (n) => n == null ? "—" : nf(n); %}
+{% var percent = (n) => n == null ? "—" : Number(n).toFixed(1) + "%"; %}
 {% var hasKeys = (o) => o && Object.keys(o).length; %}
 <div class="flow-run">
 
 {% if usage %}
 <h6>{{ __("Token Usage") }}</h6>
-<table class="table table-bordered usage">
-	<thead><tr><th>{{ __("Prompt") }}</th><th>{{ __("Completion") }}</th><th>{{ __("Total") }}</th></tr></thead>
-	<tbody><tr><td>{{ nf(usage.prompt_tokens) }}</td><td>{{ nf(usage.completion_tokens) }}</td><td>{{ nf(usage.total_tokens) }}</td></tr></tbody>
+<table class="table table-bordered usage" style="width: 100%;">
+	<thead><tr><th>{{ __("Input") }}</th><th>{{ __("Cached input") }}</th><th>{{ __("Uncached input") }}</th><th>{{ __("Cache hit") }}</th><th>{{ __("Cache coverage") }}</th><th>{{ __("Output") }}</th><th>{{ __("Reasoning output") }}</th><th>{{ __("Visible output") }}</th><th>{{ __("Reasoning coverage") }}</th><th>{{ __("Total") }}</th></tr></thead>
+	<tbody><tr>
+		<td>{{ nf(usage.prompt_tokens) }}</td>
+		<td>{{ usage.cached_input_available ? measured(usage.cached_input_tokens) : "—" }}</td>
+		<td>{{ measured(usage.uncached_input_tokens) }}</td>
+		<td>{{ percent(usage.cache_hit_percent) }}</td>
+		<td>{{ usage.cached_input_available ? esc(usage.cache_coverage) : "—" }}</td>
+		<td>{{ nf(usage.completion_tokens) }}</td>
+		<td>{{ usage.reasoning_output_available ? measured(usage.reasoning_output_tokens) : "—" }}</td>
+		<td>{{ measured(usage.visible_output_tokens) }}</td>
+		<td>{{ usage.reasoning_output_available ? esc(usage.reasoning_coverage) : "—" }}</td>
+		<td>{{ nf(usage.total_tokens) }}</td>
+	</tr></tbody>
+</table>
+{% endif %}
+
+{% if measurements && measurements.model_rounds && measurements.model_rounds.length %}
+<h6>{{ __("Model Rounds") }}</h6>
+<table class="table table-bordered rounds">
+	<thead><tr><th>#</th><th>{{ __("Outcome") }}</th><th>{{ __("Elapsed (ms)") }}</th><th>{{ __("Input") }}</th><th>{{ __("Cached input") }}</th><th>{{ __("Output") }}</th><th>{{ __("Reasoning output") }}</th><th>{{ __("Total") }}</th></tr></thead>
+	<tbody>
+{% for round in measurements.model_rounds %}
+		<tr>
+			<td>{{ esc(round.round) }}</td>
+			<td>{{ esc(round.outcome) }}</td>
+			<td>{{ measured(round.elapsed_ms) }}</td>
+			<td>{{ measured(round.prompt_tokens) }}</td>
+			<td>{{ measured(round.cached_input_tokens) }}</td>
+			<td>{{ measured(round.completion_tokens) }}</td>
+			<td>{{ measured(round.reasoning_output_tokens) }}</td>
+			<td>{{ measured(round.total_tokens) }}</td>
+		</tr>
+{% endfor %}
+	</tbody>
 </table>
 {% endif %}
 
@@ -39,12 +74,14 @@
 {% if calls && calls.length %}
 <h6>{{ __("Tool Calls") }}</h6>
 <table class="table table-bordered calls">
-	<thead><tr><th style="width: 32px;">#</th><th>{{ __("Tool") }}</th><th>{{ __("Arguments") }}</th></tr></thead>
+	<thead><tr><th style="width: 32px;">#</th><th>{{ __("Tool") }}</th><th>{{ __("Outcome") }}</th><th>{{ __("Elapsed (ms)") }}</th><th>{{ __("Arguments") }}</th></tr></thead>
 	<tbody>
 {% for c in calls %}
 		<tr>
 			<td class="text-muted">{{ c._index + 1 }}</td>
 			<td style="white-space: nowrap;"><code>{{ esc(c.name) }}</code></td>
+			<td>{{ esc(c.outcome || "—") }}</td>
+			<td>{{ measured(c.elapsed_ms) }}</td>
 			<td>{% if hasKeys(c.arguments) %}<pre class="args">{{ esc(JSON.stringify(c.arguments, null, 2)) }}</pre>{% else %}<span class="empty">—</span>{% endif %}</td>
 		</tr>
 {% endfor %}

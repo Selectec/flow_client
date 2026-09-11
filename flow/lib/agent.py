@@ -235,7 +235,7 @@ class Agent:
 
 		for iteration in range(1, self.max_iterations + 1):
 			response = self.model.chat(messages, tools=tool_schemas)
-			_accumulate_usage(usage_total, response.usage)
+			accumulate_usage(usage_total, response.usage)
 			messages.append(_assistant_message(response))
 
 			if not response.tool_calls:
@@ -297,7 +297,7 @@ class Agent:
 						yield TextChunk(text=item)
 			except StopIteration as e:
 				response = e.value
-			_accumulate_usage(usage_total, response.usage)
+			accumulate_usage(usage_total, response.usage)
 			messages.append(_assistant_message(response))
 
 			if not response.tool_calls:
@@ -459,10 +459,24 @@ def _serialize_tool_result(result: Any) -> str:
 		return ""
 	try:
 		return json.dumps(result, default=str)
-	except (TypeError, ValueError):
+	except TypeError, ValueError:
 		return str(result)
 
 
-def _accumulate_usage(total: dict[str, int], delta: dict[str, int]) -> None:
+def accumulate_usage(total: dict[str, int], delta: dict[str, int]) -> None:
 	for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
 		total[key] += int(delta.get(key, 0) or 0)
+	if "cached_input_tokens" in delta:
+		total["cached_input_tokens"] = total.get("cached_input_tokens", 0) + int(delta["cached_input_tokens"])
+		total["cached_input_covered_prompt_tokens"] = total.get(
+			"cached_input_covered_prompt_tokens", 0
+		) + int(delta.get("prompt_tokens", 0) or 0)
+		total["cached_input_reported_rounds"] = total.get("cached_input_reported_rounds", 0) + 1
+	if "reasoning_output_tokens" in delta:
+		total["reasoning_output_tokens"] = total.get("reasoning_output_tokens", 0) + int(
+			delta["reasoning_output_tokens"]
+		)
+		total["reasoning_output_covered_completion_tokens"] = total.get(
+			"reasoning_output_covered_completion_tokens", 0
+		) + int(delta.get("completion_tokens", 0) or 0)
+		total["reasoning_output_reported_rounds"] = total.get("reasoning_output_reported_rounds", 0) + 1

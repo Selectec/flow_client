@@ -21,6 +21,7 @@
   "tool_calls",
   "questions",
   "usage",
+  "measurements",
   "config_snapshot",
   "section_break_error",
   "error",
@@ -147,6 +148,14 @@
    "fieldtype": "JSON",
    "hidden": 1,
    "label": "Token Usage",
+   "read_only": 1
+  },
+  {
+   "description": "Bounded per-round model timing and outcome measurements supplied by the caller.",
+   "fieldname": "measurements",
+   "fieldtype": "JSON",
+   "hidden": 1,
+   "label": "Measurements",
    "read_only": 1
   },
   {
