@@ -10,7 +10,7 @@ license = "AGPL-3.0-or-later"
 dynamic = ["version"]
 dependencies = [
     # LiteLLM imports its MCP client catalog for ordinary tool calls.
-    "litellm[mcp]==1.106.3",
+    "litellm[mcp]==1.108.7",
     "lancedb<1,>=0.33",
     "python-docx<2,>=1.1",
     "pdfplumber<1,>=0.11",
